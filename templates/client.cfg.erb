@@ -1,0 +1,16 @@
+collectives = mcollective
+libdir = <%= instance_home %>/plugins
+logfile = <%= COLLECTIVE_LOGS %>/client.log
+loglevel = debug
+daemonize = 1
+identity = <%= identity %>
+
+securityprovider = choria
+connector = nats
+
+factsource = yaml
+plugin.yaml = <%= instance_home %>/etc/facts.yaml
+
+plugin.choria.ssldir = <%= COLLECTIVE_SSL %>
+plugin.choria.use_srv_records = false
+plugin.choria.middleware_hosts = 127.0.0.1:4222
