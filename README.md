@@ -37,29 +37,7 @@ $ cp -R ../mcollective-choria/lib/mcollective plugins
 
 You can now drop your own Plugins into that directory as well.
 
-### Starting NATS
-
-You should now start a NATS instance, this starts one listening on
-*localhost:4222*:
-
-```
-$ rake nats_server
-Starting a NATS instance on localhost:4222 press ^c to terminate
-
-    TLS Certificate: /home/rip/temp/choria-builder/collective/ssl/certs/localhost.pem
-            TLS Key: /home/rip/temp/choria-builder/collective/ssl/private_keys/localhost.pem
-     CA Certificate: /home/rip/temp/choria-builder/collective/ssl/certs/ca.pem
-           PID File: /home/rip/temp/choria-builder/collective/pid/gnats.pid
-
-Creating SSL certificate for localhost
-[11659] 2017/02/26 19:31:47.770148 [INF] Starting nats-server version 0.9.6
-```
-
-This NATS instance runs in the foreground with debug and trace enabled
-so you can see the messages that travel over the wire. As it runs in
-the foreground you probably want to do this in a dedicated terminal.
-
-### Starting MCollective
+### Creating the collective
 
 You can now create your instances of MCollective:
 
@@ -76,7 +54,6 @@ Instance Count Start (0):
 Instance Name Prefix (dev1):
 
   .......
-
 
 Created a collective with 10 members:
 
@@ -117,6 +94,30 @@ dev1-7.choria: stopped
 dev1-8.choria: stopped
 dev1-9.choria: stopped
 ```
+
+### Starting NATS
+
+You should now start a NATS instance, this starts one listening on
+*localhost:4222*:
+
+```
+$ rake nats_server
+Starting a NATS instance on localhost:4222 press ^c to terminate
+
+    TLS Certificate: /home/rip/temp/choria-builder/collective/ssl/certs/localhost.pem
+            TLS Key: /home/rip/temp/choria-builder/collective/ssl/private_keys/localhost.pem
+     CA Certificate: /home/rip/temp/choria-builder/collective/ssl/certs/ca.pem
+           PID File: /home/rip/temp/choria-builder/collective/pid/gnats.pid
+
+Creating SSL certificate for localhost
+[11659] 2017/02/26 19:31:47.770148 [INF] Starting nats-server version 0.9.6
+```
+
+This NATS instance runs in the foreground with debug and trace enabled
+so you can see the messages that travel over the wire. As it runs in
+the foreground you probably want to do this in a dedicated terminal.
+
+### Starting MCollective
 
 Lets go ahead and start the collective, you'll have a *logs* directory
 with a log file for each instance in debug level:

@@ -373,7 +373,7 @@ task :nats_server do
 
   pid_file = File.join(COLLECTIVE_PIDS, "gnats.pid")
 
-  puts "Starting a NATS instance on localhost:4222 press ^c to terminate"
+  puts "Starting a NATS instance on localhost:4222 with monitoring on localhost:8222 press ^c to terminate"
   puts
   puts "    TLS Certificate: %s" % cert_path("localhost")
   puts "            TLS Key: %s" % private_key_path("localhost")
@@ -385,7 +385,7 @@ task :nats_server do
 
   gen_cert("localhost")
 
-  system("gnatsd -a localhost --tls --tlscert %s --tlskey %s --tlscacert %s --tlsverify -p 4222 -DV -P %s" % [
+  system("gnatsd -a localhost --tls --tlscert %s --tlskey %s --tlscacert %s --tlsverify -p 4222 -m 8222 -DV -P %s" % [
     cert_path("localhost"),
     private_key_path("localhost"),
     ca_path,
