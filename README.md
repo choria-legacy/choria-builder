@@ -3,9 +3,8 @@ Choria Collective Builder
 
 ## What
 
-This configures NATS and a number of MCollective instances running
-in your home directory as a normal user with a set of plugins of
-your choice.
+This configures NATS cluster and a number of MCollective instances running
+in your home directory as a normal user with a set of plugins of your choice.
 
 This is primarily meant as an aid in developing plugins, you can run
 1 or 10 instances on your machine and interact with them over the
@@ -81,7 +80,9 @@ this collective without all the questions being asked.
 $ rake status
 Collective Status:
 
-NATS: running pid 11659
+NATS instance 0: stopped
+NATS instance 1: stopped
+NATS instance 2: stopped
 
 dev1-0.choria: stopped
 dev1-1.choria: stopped
@@ -97,25 +98,57 @@ dev1-9.choria: stopped
 
 ### Starting NATS
 
-You should now start a NATS instance, this starts one listening on
-*localhost:4222*:
+You should now start a NATS cluster, this starts 3 daemons listening on the ports listed, they are
+fully clustered up and the clients and servers are configured to connect to them all
 
 ```
-$ rake nats_server
-Starting a NATS instance on localhost:4222 press ^c to terminate
+$ rake start_nats
+Starting 3 NATS instance on localhost, use ^C to terminate
 
-    TLS Certificate: /home/rip/temp/choria-builder/collective/ssl/certs/localhost.pem
-            TLS Key: /home/rip/temp/choria-builder/collective/ssl/private_keys/localhost.pem
-     CA Certificate: /home/rip/temp/choria-builder/collective/ssl/certs/ca.pem
-           PID File: /home/rip/temp/choria-builder/collective/pid/gnats.pid
+    TLS Certificate: /home/rip/work/github/choria-builder/collective/ssl/certs/nats-0.choria.pem
+            TLS Key: /home/rip/work/github/choria-builder/collective/ssl/private_keys/nats-0.choria.pem
+     CA Certificate: /home/rip/work/github/choria-builder/collective/ssl/certs/ca.pem
+           PID File: /home/rip/work/github/choria-builder/collective/pid/gnats-0.pid
+           Log File: logs/nats-0.log
+        Listen Port: 14222
+       Monitor Port: 18222
+       Cluster Port: 15222
 
-Creating SSL certificate for localhost
-[11659] 2017/02/26 19:31:47.770148 [INF] Starting nats-server version 0.9.6
+    TLS Certificate: /home/rip/work/github/choria-builder/collective/ssl/certs/nats-1.choria.pem
+            TLS Key: /home/rip/work/github/choria-builder/collective/ssl/private_keys/nats-1.choria.pem
+     CA Certificate: /home/rip/work/github/choria-builder/collective/ssl/certs/ca.pem
+           PID File: /home/rip/work/github/choria-builder/collective/pid/gnats-1.pid
+           Log File: logs/nats-1.log
+        Listen Port: 14223
+       Monitor Port: 18223
+       Cluster Port: 15223
+
+
+    TLS Certificate: /home/rip/work/github/choria-builder/collective/ssl/certs/nats-2.choria.pem
+            TLS Key: /home/rip/work/github/choria-builder/collective/ssl/private_keys/nats-2.choria.pem
+     CA Certificate: /home/rip/work/github/choria-builder/collective/ssl/certs/ca.pem
+           PID File: /home/rip/work/github/choria-builder/collective/pid/gnats-2.pid
+           Log File: logs/nats-2.log
+        Listen Port: 14224
+       Monitor Port: 18224
+       Cluster Port: 15224
+
+nohup: appending output to ‘nohup.out’
+nohup: appending output to ‘nohup.out’
+nohup: appending output to ‘nohup.out’
+[6583] 2017/02/27 11:54:19.352412 [TRC] 127.0.0.1:37342 - rid:1 - <<- [MSG mcollective.reply.client.choria.7886.1 RSID:8:1 485]
+[6583] 2017/02/27 11:54:24.352031 [TRC] 127.0.0.1:37342 - rid:1 - ->> [UNSUB RSID:8:1]
+.
+.
+.
 ```
 
-This NATS instance runs in the foreground with debug and trace enabled
-so you can see the messages that travel over the wire. As it runs in
-the foreground you probably want to do this in a dedicated terminal.
+This NATS instances runs in the background with debug and trace enabled
+so you can see the messages that travel over the wire. Once started this will
+tail both log files.
+
+As the tail runs in the foreground you probably want to do this in a dedicated
+terminal.
 
 ### Starting MCollective
 
@@ -138,7 +171,9 @@ Starting collective member dev1-9.choria
 $ rake status
 Collective Status:
 
-NATS: running pid 11659
+NATS instance 0: running pid 17215
+NATS instance 1: running pid 17217
+NATS instance 2: running pid 17225
 
 dev1-0.choria: running pid 11827
 dev1-1.choria: running pid 11870
@@ -220,7 +255,6 @@ Stopping collective member dev1-6.choria
 Stopping collective member dev1-7.choria
 Stopping collective member dev1-8.choria
 Stopping collective member dev1-9.choria
-Stopping NATS on pid 11659
 ```
 
 Everything will be deleted but the logs and plugins will remain

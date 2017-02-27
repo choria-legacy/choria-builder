@@ -1,4 +1,4 @@
-require 'erb'
+require "erb"
 
 STDOUT.sync = true
 BUILDER_BASE = File.dirname(__FILE__)
@@ -152,26 +152,38 @@ def member_pid(member)
   Integer(File.read(pidfile).chomp)
 end
 
-def nats_pid
-  pidfile = File.join(COLLECTIVE_PIDS, "gnats.pid")
+def nats_pid_file(instance)
+  File.join(COLLECTIVE_PIDS, "gnats-%d.pid" % instance)
+end
+
+def nats_pid(instance)
+  pidfile = nats_pid_file(instance)
 
   return nil unless File.exist?(pidfile)
 
   Integer(File.read(pidfile).chomp)
 end
 
-def nats_running?
-  return nil unless pid = nats_pid
+def nats_running?(instance)
+  return nil unless pid = nats_pid(instance)
 
   File.exist?("/proc/%s" % [pid])
 end
 
 def stop_nats
-  return unless nats_running?
+  3.times do |instance|
+    pid_file = nats_pid_file(instance)
 
-  puts "Stopping NATS on pid %d" % nats_pid
+    puts "Stopping NATS on pid %d" % nats_pid(instance)
 
-  Process.kill(2, nats_pid)
+    unless nats_running?(instance)
+      File.unlink(pid_file) if File.exist?(pid_file)
+      return
+    end
+
+    Process.kill(2, nats_pid(instance))
+    File.unlink(pid_file) if File.exist?(pid_file)
+  end
 end
 
 def member_running?(member)
@@ -186,12 +198,17 @@ end
 def status
   puts "Collective Status:"
   puts
-  if nats_running?
-    puts "NATS: running pid %d" % [nats_pid]
-  else
-    puts "NATS: stopped"
+
+  3.times do |nats|
+    if nats_running?(nats)
+      puts "NATS instance %d: running pid %d" % [nats, nats_pid(nats)]
+    else
+      puts "NATS instance %d: stopped" % [nats]
+    end
   end
+
   puts
+
   member_dirs.each do |member|
     if member_running?(member)
       puts "%s: running pid %d" % [member, member_pid(member)]
@@ -213,7 +230,10 @@ def stop_member(member)
 
   Process.kill(2, pid)
 
-  FileUtils.rm(pidfile) if File.exist?(pidfile)
+  begin
+    FileUtils.rm(pidfile) if File.exist?(pidfile)
+  rescue
+  end
 end
 
 def start_member(member)
@@ -256,7 +276,7 @@ desc "Sets up a subshell to use the new collective"
 task :shell do
     abort("Don't know what shell to run you have no SHELL environment variable") unless ENV.include?("SHELL")
     abort("You need to create a collective first using rake create") if member_dirs.size == 0
-    abort("NATS is not running, please start it first") unless nats_running?
+    abort("NATS is not running, please start it first") unless nats_running?(0) && nats_running?(1) && nats_running?(2)
 
     client_home = member_dir("client.choria")
     client_config = File.join(client_home, "etc", "client.cfg")
@@ -266,6 +286,7 @@ task :shell do
     ENV["MCOLLECTIVE_EXTRA_OPTS"]= "--config=%s" % client_config
     ENV["RUBYLIB"] = client_lib
     ENV["MCOLLECTIVE_CERTNAME"] = "client.choria"
+    ENV["CHORIA_SHELL"] = "1"
 
     puts
     puts "Running %s to start a subshell with MCOLLECTIVE_EXTRA_OPTS and RUBYLIB set" % ENV["SHELL"]
@@ -274,7 +295,7 @@ task :shell do
     puts
     puts "    PATH=%s:$PATH" % client_bin
     puts
-    puts "To return to your normal shell and collective just type exit"
+    puts "To return to your normal shell and collective just type exit."
     puts
 
     system(ENV["SHELL"])
@@ -365,30 +386,50 @@ task :create do
   puts
 end
 
-desc "Sets up a NATS Server on localhost:4222"
-task :nats_server do
+desc "Sets up a 2 node NATS Cluster on localhost"
+task :start_nats do
   `which gnatsd > /dev/null 2>&1`
 
   abort("Please ensure 'gnatsd' is in your PATH") unless $?.exitstatus == 0
 
-  pid_file = File.join(COLLECTIVE_PIDS, "gnats.pid")
-
-  puts "Starting a NATS instance on localhost:4222 with monitoring on localhost:8222 press ^c to terminate"
-  puts
-  puts "    TLS Certificate: %s" % cert_path("localhost")
-  puts "            TLS Key: %s" % private_key_path("localhost")
-  puts "     CA Certificate: %s" % ca_path
-  puts "           PID File: %s" % pid_file
-  puts
-
   FileUtils.mkdir_p "logs"
 
-  gen_cert("localhost")
+  puts "Starting 3 NATS instances on localhost, use ^C to terminate"
+  puts
 
-  system("gnatsd -a localhost --tls --tlscert %s --tlskey %s --tlscacert %s --tlsverify -p 4222 -m 8222 -DV -P %s" % [
-    cert_path("localhost"),
-    private_key_path("localhost"),
-    ca_path,
-    pid_file
-  ])
+  3.times do |index|
+    abort("Already have a NATS instance %d" % index) if nats_running?(index)
+
+    listen = 14222 + index
+    monitor = 18222 + index
+    cluster = 15222 + index
+
+    instance_name = "nats-%d.choria" % index
+    pid_file = File.join(COLLECTIVE_PIDS, "gnats-%d.pid" % index)
+    log_file = "logs/nats-%d.log" % index
+
+    puts "    TLS Certificate: %s" % cert_path(instance_name)
+    puts "            TLS Key: %s" % private_key_path(instance_name)
+    puts "     CA Certificate: %s" % ca_path
+    puts "           PID File: %s" % pid_file
+    puts "           Log File: %s" % log_file
+    puts "        Listen Port: %d" % listen
+    puts "       Monitor Port: %d" % monitor
+    puts "       Cluster Port: %d" % cluster
+    puts
+
+    gen_cert(instance_name)
+
+    system("nohup gnatsd -a localhost --tls --tlscert %s --tlskey %s --tlscacert %s --tlsverify -P %s -l %s -p %d -m %d --cluster nats://localhost:%d --routes nats://localhost:15222 -DV &" % [
+      cert_path(instance_name), private_key_path(instance_name), ca_path, pid_file, log_file, listen, monitor, cluster
+    ])
+  end
+
+  begin
+    system("tail -qF logs/nats*log")
+  rescue Interrupt
+  ensure
+    stop_nats
+  end
+
 end
