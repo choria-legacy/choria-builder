@@ -31,6 +31,8 @@ $ git clone https://github.com/choria-io/choria-builder.git
 $ git clone https://github.com/choria-io/mcollective-choria.git
 $ cd choria-builder
 $ mkdir plugins
+
+# you can also symlink this
 $ cp -R ../mcollective-choria/lib/mcollective plugins
 ```
 
@@ -237,6 +239,27 @@ NOTE: Make sure you are not inside *rake shell* when running this:
 
 ```
 $ rake update
+```
+
+## Federation
+
+Configuration and a NATS instance supporting Federation is setup but not Federation brokers are started.
+
+You can start as many Federation Brokers as you like using this:
+
+```bash
+$ rake shell
+$ PATH=/home/rip/work/github/choria-builder/collective/client.choria/bin:$PATH
+$ mco federation broker --cluster builder --config collective/client.choria/etc/federation.cfg --instance 1
+```
+
+Just keep incrementing the `instance` argument - or leave it off to use a UUID.  Logs goes into the `logs` directory.
+
+Your client can use the Federation this way:
+
+```bash
+$ CHORIA_FED_COLLECTIVE=builder mco choria show_config
+$ CHORIA_FED_COLLECTIVE=builder mco rpc rpcutil ping
 ```
 
 ## Cleaning up

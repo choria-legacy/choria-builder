@@ -72,6 +72,7 @@ def render_member_config(identity)
 
   render_template(File.join(BUILDER_TEMPLATES, "server.cfg.erb"), File.join(instance_home, "etc", "server.cfg"), binding)
   render_template(File.join(BUILDER_TEMPLATES, "client.cfg.erb"), File.join(instance_home, "etc", "client.cfg"), binding)
+  render_template(File.join(BUILDER_TEMPLATES, "federation.cfg.erb"), File.join(instance_home, "etc", "federation.cfg"), binding)
 end
 
 def create_member(identity, version)
@@ -130,14 +131,16 @@ def copy_plugins
   member_dirs.each do |member|
     puts "Copying plugins for instance %s" % member
 
-    libdir = File.join(member_dir(member), "plugins")
+    libdir = File.join(member_dir(member), "plugins", "mcollective")
 
     FileUtils.mkdir_p(libdir)
-    FileUtils.cp_r(File.join(BUILDER_PLUGIN_SOURCE, "."), libdir)
+    FileUtils.cp_r(File.join(BUILDER_PLUGIN_SOURCE, "mcollective", "."), libdir)
   end
 
   puts "Copying plugins for client client.choria"
-  FileUtils.cp_r(File.join(BUILDER_PLUGIN_SOURCE, "."), File.join(COLLECTIVE_CLIENT, "plugins"))
+  libdir = File.join(COLLECTIVE_CLIENT, "plugins", "mcollective")
+  FileUtils.mkdir_p(libdir)
+  FileUtils.cp_r(File.join(BUILDER_PLUGIN_SOURCE, "mcollective", "."), libdir)
 end
 
 def member_pidfile(member)
@@ -170,19 +173,59 @@ def nats_running?(instance)
   File.exist?("/proc/%s" % [pid])
 end
 
-def stop_nats
-  3.times do |instance|
-    pid_file = nats_pid_file(instance)
+def start_nats(instance, start_cluster=true)
+  abort("Already have a NATS instance %d" % instance) if nats_running?(instance)
 
-    puts "Stopping NATS on pid %d" % nats_pid(instance)
+  listen = 14222 + instance
+  monitor = 18222 + instance
+  cluster = 15222 + instance
 
-    unless nats_running?(instance)
-      File.unlink(pid_file) if File.exist?(pid_file)
-      return
-    end
+  instance_name = "nats-%d.choria" % instance
+  pid_file = File.join(COLLECTIVE_PIDS, "gnats-%d.pid" % instance)
+  log_file = "logs/nats-%d.log" % instance
 
-    Process.kill(2, nats_pid(instance))
+  puts "    TLS Certificate: %s" % cert_path(instance_name)
+  puts "            TLS Key: %s" % private_key_path(instance_name)
+  puts "     CA Certificate: %s" % ca_path
+  puts "           PID File: %s" % pid_file
+  puts "           Log File: %s" % log_file
+  puts "        Listen Port: %d" % listen
+  puts "       Monitor Port: %d" % monitor
+  puts "       Cluster Port: %d" % cluster if start_cluster
+  puts
+
+  gen_cert(instance_name)
+
+  if start_cluster
+    system("nohup gnatsd -a localhost --tls --tlscert %s --tlskey %s --tlscacert %s --tlsverify -P %s -l %s -p %d -m %d --cluster nats://localhost:%d --routes nats://localhost:15222 -DV &" % [
+      cert_path(instance_name), private_key_path(instance_name), ca_path, pid_file, log_file, listen, monitor, cluster
+    ])
+  else
+    system("nohup gnatsd -a localhost --tls --tlscert %s --tlskey %s --tlscacert %s --tlsverify -P %s -l %s -p %d -m %d -DV &" % [
+      cert_path(instance_name), private_key_path(instance_name), ca_path, pid_file, log_file, listen, monitor, cluster
+    ])
+  end
+end
+
+def stop_nats_instance(instance)
+  pid_file = nats_pid_file(instance)
+
+  return unless pid = nats_pid(instance)
+
+  puts "Stopping NATS on pid %d" % pid
+
+  unless nats_running?(instance)
     File.unlink(pid_file) if File.exist?(pid_file)
+    return
+  end
+
+  Process.kill(2, pid)
+  File.unlink(pid_file) if File.exist?(pid_file)
+end
+
+def stop_nats
+  4.times do |instance|
+    stop_nats_instance(instance)
   end
 end
 
@@ -274,31 +317,31 @@ end
 
 desc "Sets up a subshell to use the new collective"
 task :shell do
-    abort("Don't know what shell to run you have no SHELL environment variable") unless ENV.include?("SHELL")
-    abort("You need to create a collective first using rake create") if member_dirs.size == 0
-    abort("NATS is not running, please start it first") unless nats_running?(0) && nats_running?(1) && nats_running?(2)
+  abort("Don't know what shell to run you have no SHELL environment variable") unless ENV.include?("SHELL")
+  abort("You need to create a collective first using rake create") if member_dirs.size == 0
+  abort("NATS is not running, please start it first") unless nats_running?(0) && nats_running?(1) && nats_running?(2)
 
-    client_home = member_dir("client.choria")
-    client_config = File.join(client_home, "etc", "client.cfg")
-    client_lib = File.join(client_home, "lib")
-    client_bin = File.join(client_home, "bin")
+  client_home = member_dir("client.choria")
+  client_config = File.join(client_home, "etc", "client.cfg")
+  client_lib = File.join(client_home, "lib")
+  client_bin = File.join(client_home, "bin")
 
-    ENV["MCOLLECTIVE_EXTRA_OPTS"]= "--config=%s" % client_config
-    ENV["RUBYLIB"] = client_lib
-    ENV["MCOLLECTIVE_CERTNAME"] = "client.choria"
-    ENV["CHORIA_SHELL"] = "1"
+  ENV["MCOLLECTIVE_EXTRA_OPTS"]= "--config=%s" % client_config
+  ENV["RUBYLIB"] = client_lib
+  ENV["MCOLLECTIVE_CERTNAME"] = "client.choria"
+  ENV["CHORIA_SHELL"] = "1"
 
-    puts
-    puts "Running %s to start a subshell with MCOLLECTIVE_EXTRA_OPTS and RUBYLIB set" % ENV["SHELL"]
-    puts
-    puts "Please run the following once started: "
-    puts
-    puts "    PATH=%s:$PATH" % client_bin
-    puts
-    puts "To return to your normal shell and collective just type exit."
-    puts
+  puts
+  puts "Running %s to start a subshell with MCOLLECTIVE_EXTRA_OPTS and RUBYLIB set" % ENV["SHELL"]
+  puts
+  puts "Please run the following once started: "
+  puts
+  puts "    PATH=%s:$PATH" % client_bin
+  puts
+  puts "To return to your normal shell and collective just type exit."
+  puts
 
-    system(ENV["SHELL"])
+  system(ENV["SHELL"])
 end
 
 desc "Update the configuration and plugins of all collective members"
@@ -386,7 +429,7 @@ task :create do
   puts
 end
 
-desc "Sets up a 2 node NATS Cluster on localhost"
+desc "Sets up a 3+1 node NATS Cluster on localhost"
 task :start_nats do
   `which gnatsd > /dev/null 2>&1`
 
@@ -394,36 +437,14 @@ task :start_nats do
 
   FileUtils.mkdir_p "logs"
 
-  puts "Starting 3 NATS instances on localhost, use ^C to terminate"
+  puts "Starting 3+1 NATS instances on localhost, use ^C to terminate"
   puts
 
   3.times do |index|
-    abort("Already have a NATS instance %d" % index) if nats_running?(index)
-
-    listen = 14222 + index
-    monitor = 18222 + index
-    cluster = 15222 + index
-
-    instance_name = "nats-%d.choria" % index
-    pid_file = File.join(COLLECTIVE_PIDS, "gnats-%d.pid" % index)
-    log_file = "logs/nats-%d.log" % index
-
-    puts "    TLS Certificate: %s" % cert_path(instance_name)
-    puts "            TLS Key: %s" % private_key_path(instance_name)
-    puts "     CA Certificate: %s" % ca_path
-    puts "           PID File: %s" % pid_file
-    puts "           Log File: %s" % log_file
-    puts "        Listen Port: %d" % listen
-    puts "       Monitor Port: %d" % monitor
-    puts "       Cluster Port: %d" % cluster
-    puts
-
-    gen_cert(instance_name)
-
-    system("nohup gnatsd -a localhost --tls --tlscert %s --tlskey %s --tlscacert %s --tlsverify -P %s -l %s -p %d -m %d --cluster nats://localhost:%d --routes nats://localhost:15222 -DV &" % [
-      cert_path(instance_name), private_key_path(instance_name), ca_path, pid_file, log_file, listen, monitor, cluster
-    ])
+    start_nats(index, true)
   end
+
+  start_nats(3, false)
 
   begin
     system("tail -qF logs/nats*log")
@@ -431,5 +452,4 @@ task :start_nats do
   ensure
     stop_nats
   end
-
 end
