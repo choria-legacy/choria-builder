@@ -196,6 +196,7 @@ def start_nats(instance, start_cluster=true)
 
   gen_cert(instance_name)
 
+  FileUtils.rm(log_file)
   if start_cluster
     system("nohup gnatsd -a localhost --tls --tlscert %s --tlskey %s --tlscacert %s --tlsverify -P %s -l %s -p %d -m %d --cluster nats://localhost:%d --routes nats://localhost:15222 -DV &" % [
       cert_path(instance_name), private_key_path(instance_name), ca_path, pid_file, log_file, listen, monitor, cluster
@@ -219,7 +220,12 @@ def stop_nats_instance(instance)
     return
   end
 
-  Process.kill(2, pid)
+  begin
+    Process.kill(2, pid)
+    sleep 1
+  rescue Interrupt
+  end
+
   File.unlink(pid_file) if File.exist?(pid_file)
 end
 
@@ -242,7 +248,7 @@ def status
   puts "Collective Status:"
   puts
 
-  3.times do |nats|
+  4.times do |nats|
     if nats_running?(nats)
       puts "NATS instance %d: running pid %d" % [nats, nats_pid(nats)]
     else
