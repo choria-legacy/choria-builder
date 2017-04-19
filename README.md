@@ -21,7 +21,7 @@ from their page https://github.com/nats-io/gnatsd/releases
 
 You should install the *nats-pure* gem into your shell
 
-## Getting Started
+## Getting Started
 
 First you have to clone this repo and provide the Choria plugins:
 
